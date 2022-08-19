@@ -1,4 +1,4 @@
-use std::{path::{Path, PathBuf}, ffi::OsStr, collections::HashMap, fs::File, io::{self, Read, Write}, borrow::Borrow};
+use std::{path::{Path, PathBuf}, ffi::OsStr, collections::HashMap, fs::{File, self}, io::{self, Read, Write}, borrow::Borrow};
 
 use fs_extra::dir::CopyOptions;
 use git2::Repository;
@@ -100,6 +100,8 @@ pub fn clone_to_cache(git: &str) -> Result<TemplateManifest, ExecError> {
 
 
     }
+
+    fs::create_dir_all(&template)?;
 
     Repository::clone_recurse(git, template)?;
 
