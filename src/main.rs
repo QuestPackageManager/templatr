@@ -84,6 +84,7 @@ fn main() -> color_eyre::Result<()> {
                 
                 if !regex.is_match(&input) {
                     println!("Input does not match regex's requirements")
+                    continue;
                 }
             }
 
