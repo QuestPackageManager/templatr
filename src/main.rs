@@ -83,7 +83,7 @@ fn main() -> color_eyre::Result<()> {
                 let regex = Regex::new(regex_str)?;
                 
                 if !regex.is_match(&input) {
-                    println!("Input does not match regex's requirements")
+                    println!("Input does not match regex's requirements");
                     continue;
                 }
             }
