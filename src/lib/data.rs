@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use serde::{Serialize, Deserialize};
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Hash, PartialEq, PartialOrd, Ord, Eq)]
 pub struct PlaceHolder {
     #[serde(rename="match")]
     pub target: String,

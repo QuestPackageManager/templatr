@@ -6,16 +6,27 @@ authors = ["Fernthedev"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[dev-dependencies]
+
+
 [dependencies]
+thiserror = "1.0"
+
+# lib used only
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 git2 = "0.15"
 dirs = "4"
-thiserror = "1.0"
 regex = "1"
 fs_extra = "1"
 walkdir = "2"
+clap = { version = "3.2.17", features = ["derive"] }
+color-eyre = "0.6.2"
 
 [lib]
 name = "templatr"
 path = "src/lib/mod.rs"
+
+[profile.release]
+opt-level = 3
+lto = true
