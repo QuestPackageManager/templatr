@@ -173,7 +173,7 @@ pub fn copy_template(git: &str, target: &Path, placeholders: &HashMap<PlaceHolde
     fs_extra::dir::copy(&src, &target, &options)?;
 
     let mut open_options = File::options();
-    open_options.read(true).append(false).write(true);
+    open_options.read(true).write(true).append(false);
 
     for entry in WalkDir::new(target) {
         let entry = entry?;
@@ -194,7 +194,9 @@ pub fn copy_template(git: &str, target: &Path, placeholders: &HashMap<PlaceHolde
         }
         if edited {        
             file.seek(SeekFrom::Start(0))?;
-            file.write_all(contents.into_bytes().as_slice())?;
+            let bytes = contents.into_bytes();
+            file.set_len(bytes.len().try_into().expect("Casting to u64 failed"))?;
+            file.write_all(bytes.as_slice())?;
         }
     }
 
