@@ -1,4 +1,4 @@
-use std::{path::{Path, PathBuf}, ffi::OsStr, collections::HashMap, fs::{File, self}, io::{self, Read, Write}, borrow::Borrow};
+use std::{path::{Path, PathBuf}, ffi::OsStr, collections::HashMap, fs::{File, self, OpenOptions}, io::{self, Read, Write, Seek, SeekFrom}, borrow::Borrow};
 
 use fs_extra::dir::CopyOptions;
 use git2::Repository;
@@ -16,7 +16,7 @@ pub enum ExecError {
     #[error("Unable to clone repository")]
     GitError(#[from] git2::Error),
 
-    #[error("Unable to clone repository")]
+    #[error("Unable to copy directory")]
     IoError(#[from] io::Error),
 
     #[error("Unable to copy template")]
@@ -123,7 +123,7 @@ pub fn get_manifest(git: &str) -> Result<TemplateManifest, ExecError> {
     
     let manifest: TemplateManifest = serde_json::from_reader(File::open(manifest_file)?)?;
 
-    if !manifest.src.exists() {
+    if !template.join(&manifest.src).exists() {
         return Err(ExecError::NoSrcFolderFound);
     }
 
@@ -166,20 +166,36 @@ pub fn copy_template(git: &str, target: &Path, placeholders: &HashMap<PlaceHolde
     }
 
     
-    let options = CopyOptions::new(); //Initialize default values for CopyOptio
+    let mut options = CopyOptions::new(); //Initialize default values for CopyOptio
+    options.content_only = true;
+    options.overwrite = true;
 
-    fs_extra::dir::copy(src, target, &options)?;
+    fs_extra::dir::copy(&src, &target, &options)?;
+
+    let mut open_options = File::options();
+    open_options.read(true).append(false).write(true);
 
     for entry in WalkDir::new(target) {
         let entry = entry?;
+        if entry.path().is_dir() {
+            continue;
+        }
 
         let mut contents = String::new();
-        let mut file = File::open(entry.path())?;
+        let mut edited = false;
+        let mut file = open_options.open(entry.path().canonicalize()?)?;
         file.read_to_string(&mut contents)?;
         for (placeholder, value) in placeholders.iter() {
-            contents = contents.replace(placeholder.target.as_str(), value);
+            let new_contents = contents.replace(placeholder.target.as_str(), value);
+            if new_contents != contents {
+                contents = new_contents;
+                edited = true;
+            }
         }
-        file.write_all(contents.into_bytes().as_slice())?;
+        if edited {        
+            file.seek(SeekFrom::Start(0))?;
+            file.write_all(contents.into_bytes().as_slice())?;
+        }
     }
 
     Ok(())

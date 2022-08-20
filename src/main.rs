@@ -26,7 +26,7 @@ fn get_input() -> color_eyre::Result<String> {
         .read_line(&mut ret)
         .context("Unable to read input")?;
 
-    Ok(ret)
+    Ok(ret.replace("\r\n", "").replace('\n', ""))
 }
 
 fn get_bool_input() -> color_eyre::Result<bool> {
