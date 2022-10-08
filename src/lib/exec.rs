@@ -1,4 +1,4 @@
-use std::{path::{Path, PathBuf}, ffi::OsStr, collections::HashMap, fs::{File, self, OpenOptions}, io::{self, Read, Write, Seek, SeekFrom}, borrow::Borrow};
+use std::{path::{Path}, collections::HashMap, fs::{File, self}, io::{self, Read, Write, Seek, SeekFrom}, borrow::Borrow};
 
 use fs_extra::dir::CopyOptions;
 use git2::Repository;
@@ -6,6 +6,7 @@ use regex::Regex;
 use thiserror::Error;
 use walkdir::WalkDir;
 
+use super::paths::get_template_cache_path_from_git;
 use super::data::{TemplateManifest, PlaceHolder};
 
 #[derive(Error, Debug)]
@@ -56,28 +57,6 @@ pub enum ExecError {
     MissingPlaceholders(Vec<PlaceHolder>)
 }
 
-pub fn get_cache_folder() -> Result<PathBuf, ExecError> {
-    let root = dirs::cache_dir().or_else(|| dirs::data_local_dir().or_else(dirs::data_dir));
-
-    if root.is_none() {
-        return Err(ExecError::NoCacheFound)
-    }
-
-    Ok(root.unwrap().join("templatr-rust"))
-}
-
-pub fn get_template_cache_path(str: &str) -> Result<PathBuf, ExecError> {
-    let cache = get_cache_folder()?;
-
-    Ok(cache.join(str))
-}
-
-pub fn get_template_cache_path_from_git(git: &str) -> Result<(&str, PathBuf), ExecError>  {
-        let name_path = Path::new(git).file_name().unwrap_or_else(|| OsStr::new(git)); // TODO: Handle error properly
-    let name = name_path.to_str().unwrap();
-
-    Ok((name, get_template_cache_path(name)?))
-}
 
 pub fn clone_to_cache(git: &str) -> Result<TemplateManifest, ExecError> {
     let (_, template) = get_template_cache_path_from_git(git)?;

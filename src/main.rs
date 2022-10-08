@@ -42,7 +42,13 @@ fn main() -> color_eyre::Result<()> {
     let git = args.git;
     let dest = args.dest;
 
-    let manifest = match exec::get_manifest(&git) {
+
+    prompt(&git, &dest)
+}
+
+
+pub fn prompt(git: &str, dest: &str) -> color_eyre::Result<()> {
+    let manifest = match exec::get_manifest(git) {
         Ok(manifest) => Ok(manifest),
         Err(e) => match e {
             exec::ExecError::TemplateNotFound => {
@@ -52,7 +58,7 @@ fn main() -> color_eyre::Result<()> {
                     std::process::exit(0);
                 }
 
-                exec::clone_to_cache(&git)
+                exec::clone_to_cache(git)
             },
             _ => Err(e)
         },
@@ -97,7 +103,7 @@ fn main() -> color_eyre::Result<()> {
     
 
     
-    exec::copy_template(&git, Path::new(&dest), &placeholders)?;
+    exec::copy_template(git, Path::new(&dest), &placeholders)?;
 
 
     Ok(())
