@@ -6,8 +6,9 @@ use regex::Regex;
 use thiserror::Error;
 use walkdir::WalkDir;
 
-use super::paths::get_template_cache_path_from_git;
-use super::data::{TemplateManifest, PlaceHolder};
+use super::{data::{PlaceHolder, TemplateManifest}, paths::get_template_cache_path_from_git};
+
+
 
 #[derive(Error, Debug)]
 pub enum ExecError {
