@@ -1,11 +1,8 @@
 mod lib;
 
-
-
 use clap::Parser;
 
-
-use templatr::{prompt::prompt};
+use templatr::prompt::prompt;
 
 /// Templatr rust rewrite (implementation not based on the old one)
 #[derive(Parser, Debug)]
@@ -16,10 +13,8 @@ struct Args {
     git: String,
 
     /// Destination where template will be copied to. FILES WILL BE OVERWRITTEN
-    dest: String
+    dest: String,
 }
-
-
 
 fn main() -> color_eyre::Result<()> {
     color_eyre::install()?;
@@ -28,7 +23,5 @@ fn main() -> color_eyre::Result<()> {
     let git = args.git;
     let dest = args.dest;
 
-
     prompt(&git, &dest)
 }
-
