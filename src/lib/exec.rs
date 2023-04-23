@@ -4,6 +4,7 @@ use std::{
     fs::{self, File},
     io::{self, Read, Seek, SeekFrom, Write},
     path::Path,
+    process::Command,
 };
 
 use fs_extra::dir::CopyOptions;
@@ -11,8 +12,6 @@ use git2::Repository;
 use regex::Regex;
 use thiserror::Error;
 use walkdir::WalkDir;
-
-use crate::git;
 
 use super::{
     data::{PlaceHolder, TemplateManifest},
@@ -121,114 +120,19 @@ pub fn get_manifest(git: &str) -> Result<TemplateManifest> {
 // https://github.com/rust-lang/git2-rs/blob/88c67f788d59b4c180580b0ac6d119d42c59f61c/examples/pull.rs#L26
 fn update_cache(template: &Path) -> Result<()> {
     println!("Checking for updates");
-    let repo = Repository::open(template).map_err(ExecError::GitError)?;
 
-    let remotes = repo.remotes().map_err(ExecError::GitError)?;
-    let remote_name = remotes
-        .get(0)
-        .unwrap_or_else(|| panic!("No remote on this repo?"));
+    let mut process = Command::new("git");
+    process.current_dir(template.parent().unwrap());
+    process.arg("pull");
 
-    let mut remote = repo.find_remote(remote_name).map_err(ExecError::GitError)?;
+    let res = process.output();
 
-    remote
-        .connect(git2::Direction::Fetch)
-        .map_err(ExecError::GitError)?;
-
-    let refs = &[remote
-        .default_branch()
-        .map_err(ExecError::GitError)?
-        .as_str()
-        .unwrap()
-        .to_string()];
-
-    remote.disconnect().map_err(ExecError::GitError)?;
-
-    let fetch_commit: git2::AnnotatedCommit =
-        git::do_fetch(&repo, refs, &mut remote).map_err(ExecError::GitError)?;
-
-    // if fetch_commit.id() == repo.head().map_err(ExecError::GitError)?.peel_to_commit().unwrap().id() {
-    //     println!("Already on latest");
-    //     return Ok(());
-    // }
-
-    let refname = refs.get(0).unwrap();
-    let mut branch = repo.find_reference(refname).map_err(ExecError::GitError)?;
-
-    git::fast_forward(&repo, &mut branch, &fetch_commit).map_err(ExecError::GitError)?;
-    println!("Checked out {}", fetch_commit.id());
-
-    Ok(())
-    // // remote.fetch(&[repo.head().map_err(ExecError::GitError)?.shorthand().unwrap()], None, None);
-    // remote.fetch(&[remote.default_branch().map_err(ExecError::GitError)?.as_str().unwrap()], None, None);
-
-    // remote.
-}
-
-/**
- * 
-// https://github.com/rust-lang/git2-rs/blob/88c67f788d59b4c180580b0ac6d119d42c59f61c/examples/pull.rs#L26
-fn update_cache(template: &Path) -> Result<()> {
-    println!("Checking for updates");
-    let repo = Repository::open(template).map_err(ExecError::GitError)?;
-
-    let remotes = repo.remotes().map_err(ExecError::GitError)?;
-    let remote_name = remotes
-        .get(0)
-        .unwrap_or_else(|| panic!("No remote on this repo?"));
-
-    let mut remote = repo.find_remote(remote_name).map_err(ExecError::GitError)?;
-
-    remote
-        .connect(git2::Direction::Fetch)
-        .map_err(ExecError::GitError)?;
-
-    // Get main or master
-    // I can't be bothered to support other branches
-    let refs_vec = &[
-        repo.find_branch("main", git2::BranchType::Local),
-        repo.find_branch("master", git2::BranchType::Local),
-    ];
-
-    let refs = &[refs_vec
-        .iter()
-        .find(|r| r.is_ok() && r.as_ref().unwrap().upstream().is_ok())
-        .unwrap()
-        .as_ref()
-        .unwrap()
-        .name()
-        .unwrap()
-        .unwrap()];
-
-    remote.disconnect().map_err(ExecError::GitError)?;
-
-    let fetch_commit: git2::AnnotatedCommit =
-        git::do_fetch(&repo, refs, &mut remote).map_err(ExecError::GitError)?;
-
-    if fetch_commit.id()
-        == repo
-            .head()
-            .map_err(ExecError::GitError)?
-            .peel_to_commit()
-            .unwrap()
-            .id()
-    {
-        println!("Already on latest");
-        return Ok(());
+    if let Err(e) = res {
+        println!("Error: {e}");
     }
 
-    let refname = format!("refs/heads/{}", refs.first().unwrap());
-    let mut branch = repo.find_reference(&refname).map_err(ExecError::GitError)?;
-
-    git::fast_forward(&repo, &mut branch, &fetch_commit).map_err(ExecError::GitError)?;
-    println!("Checked out {}", fetch_commit.id());
-
     Ok(())
-    // // remote.fetch(&[repo.head().map_err(ExecError::GitError)?.shorthand().unwrap()], None, None);
-    // remote.fetch(&[remote.default_branch().map_err(ExecError::GitError)?.as_str().unwrap()], None, None);
-
-    // remote.
 }
- */
 
 pub fn copy_template(
     git: &str,

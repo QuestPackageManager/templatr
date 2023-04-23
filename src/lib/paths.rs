@@ -1,6 +1,6 @@
 use std::{
     ffi::OsStr,
-    path::{self, Path, PathBuf},
+    path::{Path, PathBuf},
 };
 
 use super::exec::ExecError;
