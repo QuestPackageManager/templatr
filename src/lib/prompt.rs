@@ -60,8 +60,7 @@ pub fn prompt(git: &str, dest: &str) -> color_eyre::Result<()> {
             placeholder.optional,
             placeholder
                 .regex
-                .clone()
-                .unwrap_or_else(|| "".to_string())
+                .clone().unwrap_or_default()
                 .purple()
         );
 
@@ -87,7 +86,7 @@ pub fn prompt(git: &str, dest: &str) -> color_eyre::Result<()> {
         }
     }
 
-    fs::create_dir_all(&dest)?;
+    fs::create_dir_all(dest)?;
 
     exec::copy_template(git, Path::new(&dest), &placeholders)?;
 

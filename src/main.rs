@@ -1,5 +1,3 @@
-mod lib;
-
 use clap::Parser;
 
 use templatr::prompt::prompt;

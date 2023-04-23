@@ -17,6 +17,7 @@ use super::{
     paths::get_template_cache_path_from_git,
 };
 
+#[allow(dead_code)]
 #[derive(Error, Debug)]
 pub enum ExecError {
     #[error("None of the expected cache folders for the system were found")]
@@ -65,9 +66,9 @@ pub enum ExecError {
     MissingPlaceholders(Vec<PlaceHolder>),
 }
 
-type SelfResult<T> = Result<T, Box<ExecError>>;
+pub type Result<T> = core::result::Result<T, Box<ExecError>>;
 
-pub fn clone_to_cache(git: &str) -> SelfResult<TemplateManifest> {
+pub fn clone_to_cache(git: &str) -> Result<TemplateManifest> {
     let (_, template) = get_template_cache_path_from_git(git)?;
 
     if template.exists() {
@@ -85,14 +86,14 @@ pub fn clone_to_cache(git: &str) -> SelfResult<TemplateManifest> {
         // })?
     }
 
-    fs::create_dir_all(&template).map_err(|e| ExecError::IoError(e))?;
+    fs::create_dir_all(&template).map_err(ExecError::IoError)?;
 
-    Repository::clone_recurse(git, template).map_err(|e| ExecError::GitError(e));
+    Repository::clone_recurse(git, template).map_err(ExecError::GitError)?;
 
     get_manifest(git)
 }
 
-pub fn get_manifest(git: &str) -> SelfResult<TemplateManifest> {
+pub fn get_manifest(git: &str) -> Result<TemplateManifest> {
     let (_, template) = get_template_cache_path_from_git(git)?;
 
     if !template.exists() {
@@ -106,8 +107,8 @@ pub fn get_manifest(git: &str) -> SelfResult<TemplateManifest> {
     }
 
     let manifest: TemplateManifest =
-        serde_json::from_reader(File::open(manifest_file).map_err(|e| ExecError::IoError(e))?)
-            .map_err(|e| ExecError::SerdeError(e))?;
+        serde_json::from_reader(File::open(manifest_file).map_err(ExecError::IoError)?)
+            .map_err(ExecError::SerdeError)?;
 
     if !template.join(&manifest.src).exists() {
         return Err(Box::new(ExecError::NoSrcFolderFound));
@@ -116,7 +117,7 @@ pub fn get_manifest(git: &str) -> SelfResult<TemplateManifest> {
     // validate all regexes
     for placeholder in &manifest.placeholders {
         if let Some(regex) = placeholder.regex.as_ref() {
-            Regex::new(regex.as_str()).map_err(|e| ExecError::RegexError(e))?;
+            Regex::new(regex.as_str()).map_err(ExecError::RegexError)?;
         }
     }
     Ok(manifest)
@@ -126,7 +127,7 @@ pub fn copy_template(
     git: &str,
     target: &Path,
     placeholders: &HashMap<PlaceHolder, String>,
-) -> SelfResult<()> {
+) -> Result<()> {
     let (_, template) = get_template_cache_path_from_git(git)?;
     let manifest = get_manifest(git)?;
     let src = template.join(manifest.src);
@@ -174,13 +175,13 @@ pub fn copy_template(
     options.content_only = true;
     options.overwrite = true;
 
-    fs_extra::dir::copy(&src, &target, &options).map_err(|e| ExecError::CopyError(e))?;
+    fs_extra::dir::copy(&src, target, &options).map_err(ExecError::CopyError)?;
 
     let mut open_options = File::options();
     open_options.read(true).write(true).append(false);
 
     for entry in WalkDir::new(target) {
-        let entry = entry.map_err(|e| ExecError::WalkDir(e))?;
+        let entry = entry.map_err(ExecError::WalkDir)?;
         if entry.path().is_dir() {
             continue;
         }
@@ -192,11 +193,11 @@ pub fn copy_template(
                 entry
                     .path()
                     .canonicalize()
-                    .map_err(|e| ExecError::IoError(e))?,
+                    .map_err(ExecError::IoError)?,
             )
-            .map_err(|e| ExecError::IoError(e))?;
+            .map_err(ExecError::IoError)?;
         file.read_to_string(&mut contents)
-            .map_err(|e| ExecError::IoError(e))?;
+            .map_err(ExecError::IoError)?;
         for (placeholder, value) in placeholders.iter() {
             let new_contents = contents.replace(placeholder.target.as_str(), value);
             if new_contents != contents {
@@ -206,12 +207,12 @@ pub fn copy_template(
         }
         if edited {
             file.seek(SeekFrom::Start(0))
-                .map_err(|e| ExecError::IoError(e))?;
+                .map_err(ExecError::IoError)?;
             let bytes = contents.into_bytes();
             file.set_len(bytes.len().try_into().expect("Casting to u64 failed"))
-                .map_err(|e| ExecError::IoError(e))?;
+                .map_err(ExecError::IoError)?;
             file.write_all(bytes.as_slice())
-                .map_err(|e| ExecError::IoError(e))?;
+                .map_err(ExecError::IoError)?;
         }
     }
 
