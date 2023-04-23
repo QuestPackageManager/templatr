@@ -12,6 +12,8 @@ use regex::Regex;
 use thiserror::Error;
 use walkdir::WalkDir;
 
+use crate::git;
+
 use super::{
     data::{PlaceHolder, TemplateManifest},
     paths::get_template_cache_path_from_git,
@@ -68,33 +70,26 @@ pub enum ExecError {
 
 pub type Result<T> = core::result::Result<T, Box<ExecError>>;
 
-pub fn clone_to_cache(git: &str) -> Result<TemplateManifest> {
-    let (_, template) = get_template_cache_path_from_git(git)?;
+pub fn get_or_clone_to_cache(git: &str) -> Result<TemplateManifest> {
+    let path_info = get_template_cache_path_from_git(git)?;
 
-    if template.exists() {
-        return Err(Box::new(ExecError::TemplateAlreadyExists));
+    let template = path_info.path;
 
-        // TODO: Update repository
+    if !template.exists() {
+        fs::create_dir_all(&template).map_err(ExecError::IoError)?;
 
-        // let mut repo = Repository::open(template)?;
-        // let branches: Vec<Branch> = repo.branches(Some(BranchType::Local))?.collect()?;
-        // let branch = branches.get(0).ok_or(ExecError::NoBranchFound)?;
-        // let upstream_name = repo.remotes()?.get(0).ok_or(ExecError::NoUpstreamFound)?;
-        // let upstream = repo.branch_upstream_name(branch.name()?.unwrap())?;
-        // repo.fetchhead_foreach(|refname, url, oid, merge| {
-
-        // })?
+        Repository::clone_recurse(git, template).map_err(ExecError::GitError)?;
+    } else {
+        update_cache(&template)?;
     }
-
-    fs::create_dir_all(&template).map_err(ExecError::IoError)?;
-
-    Repository::clone_recurse(git, template).map_err(ExecError::GitError)?;
 
     get_manifest(git)
 }
 
 pub fn get_manifest(git: &str) -> Result<TemplateManifest> {
-    let (_, template) = get_template_cache_path_from_git(git)?;
+    let path_info = get_template_cache_path_from_git(git)?;
+
+    let template = path_info.path;
 
     if !template.exists() {
         return Err(Box::new(ExecError::TemplateNotFound));
@@ -123,12 +118,125 @@ pub fn get_manifest(git: &str) -> Result<TemplateManifest> {
     Ok(manifest)
 }
 
+// https://github.com/rust-lang/git2-rs/blob/88c67f788d59b4c180580b0ac6d119d42c59f61c/examples/pull.rs#L26
+fn update_cache(template: &Path) -> Result<()> {
+    println!("Checking for updates");
+    let repo = Repository::open(template).map_err(ExecError::GitError)?;
+
+    let remotes = repo.remotes().map_err(ExecError::GitError)?;
+    let remote_name = remotes
+        .get(0)
+        .unwrap_or_else(|| panic!("No remote on this repo?"));
+
+    let mut remote = repo.find_remote(remote_name).map_err(ExecError::GitError)?;
+
+    remote
+        .connect(git2::Direction::Fetch)
+        .map_err(ExecError::GitError)?;
+
+    let refs = &[remote
+        .default_branch()
+        .map_err(ExecError::GitError)?
+        .as_str()
+        .unwrap()
+        .to_string()];
+
+    remote.disconnect().map_err(ExecError::GitError)?;
+
+    let fetch_commit: git2::AnnotatedCommit =
+        git::do_fetch(&repo, refs, &mut remote).map_err(ExecError::GitError)?;
+
+    // if fetch_commit.id() == repo.head().map_err(ExecError::GitError)?.peel_to_commit().unwrap().id() {
+    //     println!("Already on latest");
+    //     return Ok(());
+    // }
+
+    let refname = refs.get(0).unwrap();
+    let mut branch = repo.find_reference(refname).map_err(ExecError::GitError)?;
+
+    git::fast_forward(&repo, &mut branch, &fetch_commit).map_err(ExecError::GitError)?;
+    println!("Checked out {}", fetch_commit.id());
+
+    Ok(())
+    // // remote.fetch(&[repo.head().map_err(ExecError::GitError)?.shorthand().unwrap()], None, None);
+    // remote.fetch(&[remote.default_branch().map_err(ExecError::GitError)?.as_str().unwrap()], None, None);
+
+    // remote.
+}
+
+/**
+ * 
+// https://github.com/rust-lang/git2-rs/blob/88c67f788d59b4c180580b0ac6d119d42c59f61c/examples/pull.rs#L26
+fn update_cache(template: &Path) -> Result<()> {
+    println!("Checking for updates");
+    let repo = Repository::open(template).map_err(ExecError::GitError)?;
+
+    let remotes = repo.remotes().map_err(ExecError::GitError)?;
+    let remote_name = remotes
+        .get(0)
+        .unwrap_or_else(|| panic!("No remote on this repo?"));
+
+    let mut remote = repo.find_remote(remote_name).map_err(ExecError::GitError)?;
+
+    remote
+        .connect(git2::Direction::Fetch)
+        .map_err(ExecError::GitError)?;
+
+    // Get main or master
+    // I can't be bothered to support other branches
+    let refs_vec = &[
+        repo.find_branch("main", git2::BranchType::Local),
+        repo.find_branch("master", git2::BranchType::Local),
+    ];
+
+    let refs = &[refs_vec
+        .iter()
+        .find(|r| r.is_ok() && r.as_ref().unwrap().upstream().is_ok())
+        .unwrap()
+        .as_ref()
+        .unwrap()
+        .name()
+        .unwrap()
+        .unwrap()];
+
+    remote.disconnect().map_err(ExecError::GitError)?;
+
+    let fetch_commit: git2::AnnotatedCommit =
+        git::do_fetch(&repo, refs, &mut remote).map_err(ExecError::GitError)?;
+
+    if fetch_commit.id()
+        == repo
+            .head()
+            .map_err(ExecError::GitError)?
+            .peel_to_commit()
+            .unwrap()
+            .id()
+    {
+        println!("Already on latest");
+        return Ok(());
+    }
+
+    let refname = format!("refs/heads/{}", refs.first().unwrap());
+    let mut branch = repo.find_reference(&refname).map_err(ExecError::GitError)?;
+
+    git::fast_forward(&repo, &mut branch, &fetch_commit).map_err(ExecError::GitError)?;
+    println!("Checked out {}", fetch_commit.id());
+
+    Ok(())
+    // // remote.fetch(&[repo.head().map_err(ExecError::GitError)?.shorthand().unwrap()], None, None);
+    // remote.fetch(&[remote.default_branch().map_err(ExecError::GitError)?.as_str().unwrap()], None, None);
+
+    // remote.
+}
+ */
+
 pub fn copy_template(
     git: &str,
     target: &Path,
     placeholders: &HashMap<PlaceHolder, String>,
 ) -> Result<()> {
-    let (_, template) = get_template_cache_path_from_git(git)?;
+    let path_info = get_template_cache_path_from_git(git)?;
+    let template = path_info.path;
     let manifest = get_manifest(git)?;
     let src = template.join(manifest.src);
 
@@ -139,9 +247,11 @@ pub fn copy_template(
         .placeholders
         .into_iter()
         .filter(|placeholder| {
-            !placeholder.optional && 
-        // true if no placeholder in the map has the same target
-        !placeholders.iter().any(|p| p.0.target == placeholder.target)
+            !placeholder.optional
+            // true if no placeholder in the map has the same target
+                && !placeholders
+                    .iter()
+                    .any(|p| p.0.target == placeholder.target)
         })
         .collect();
 
@@ -189,12 +299,7 @@ pub fn copy_template(
         let mut contents = String::new();
         let mut edited = false;
         let mut file = open_options
-            .open(
-                entry
-                    .path()
-                    .canonicalize()
-                    .map_err(ExecError::IoError)?,
-            )
+            .open(entry.path().canonicalize().map_err(ExecError::IoError)?)
             .map_err(ExecError::IoError)?;
         file.read_to_string(&mut contents)
             .map_err(ExecError::IoError)?;
@@ -206,8 +311,7 @@ pub fn copy_template(
             }
         }
         if edited {
-            file.seek(SeekFrom::Start(0))
-                .map_err(ExecError::IoError)?;
+            file.seek(SeekFrom::Start(0)).map_err(ExecError::IoError)?;
             let bytes = contents.into_bytes();
             file.set_len(bytes.len().try_into().expect("Casting to u64 failed"))
                 .map_err(ExecError::IoError)?;

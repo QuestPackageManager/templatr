@@ -21,7 +21,7 @@ fn get_bool_input() -> color_eyre::Result<bool> {
 }
 
 pub fn prompt(git: &str, dest: &str) -> color_eyre::Result<()> {
-    let manifest = match exec::get_manifest(git) {
+    let manifest = match exec::get_or_clone_to_cache(git) {
         Ok(manifest) => Ok(manifest),
         Err(e) => match e.as_ref() {
             exec::ExecError::TemplateNotFound => {
@@ -34,7 +34,7 @@ pub fn prompt(git: &str, dest: &str) -> color_eyre::Result<()> {
                     std::process::exit(0);
                 }
 
-                exec::clone_to_cache(git)
+                exec::get_or_clone_to_cache(git)
             }
             _ => Err(e),
         },
@@ -58,10 +58,7 @@ pub fn prompt(git: &str, dest: &str) -> color_eyre::Result<()> {
             placeholder.target.cyan(),
             placeholder.prompt.yellow(),
             placeholder.optional,
-            placeholder
-                .regex
-                .clone().unwrap_or_default()
-                .purple()
+            placeholder.regex.clone().unwrap_or_default().purple()
         );
 
         loop {

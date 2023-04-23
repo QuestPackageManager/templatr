@@ -1,68 +1,57 @@
 {
-    // Use IntelliSense to learn about possible attributes.
-    // Hover to view descriptions of existing attributes.
-    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
-    "version": "0.2.0",
-    "configurations": [
-        {
-            "type": "lldb",
-            "request": "launch",
-            "name": "Debug unit tests in library 'templatr'",
-            "cargo": {
-                "args": [
-                    "test",
-                    "--no-run",
-                    "--lib",
-                    "--package=templatr"
-                ],
-                "filter": {
-                    "name": "templatr",
-                    "kind": "lib"
-                }
-            },
-            "args": [],
-            "cwd": "${workspaceFolder}"
-        },
-        {
-            "type": "lldb",
-            "request": "launch",
-            "name": "Debug executable 'templatr'",
-            "cargo": {
-                "args": [
-                    "build",
-                    "--bin=templatr",
-                    "--package=templatr"
-                ],
-                "filter": {
-                    "name": "templatr",
-                    "kind": "bin"
-                }
-            },
-            "args": [
-                "--git",
-                "https://github.com/Lauriethefish/quest-mod-template.git",
-                "./dest_template"
-            ],
-            "cwd": "${workspaceFolder}"
-        },
-        {
-            "type": "lldb",
-            "request": "launch",
-            "name": "Debug unit tests in executable 'templatr'",
-            "cargo": {
-                "args": [
-                    "test",
-                    "--no-run",
-                    "--bin=templatr",
-                    "--package=templatr"
-                ],
-                "filter": {
-                    "name": "templatr",
-                    "kind": "bin"
-                }
-            },
-            "args": [],
-            "cwd": "${workspaceFolder}"
+  // Use IntelliSense to learn about possible attributes.
+  // Hover to view descriptions of existing attributes.
+  // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug unit tests in library 'templatr'",
+      "cargo": {
+        "args": ["test", "--no-run", "--lib", "--package=templatr"],
+        "filter": {
+          "name": "templatr",
+          "kind": "lib"
         }
-    ]
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug executable 'templatr'",
+      "cargo": {
+        "args": ["build", "--bin=templatr", "--package=templatr"],
+        "filter": {
+          "name": "templatr",
+          "kind": "bin"
+        }
+      },
+      "args": [
+        "--git",
+        "https://github.com/Lauriethefish/quest-mod-template.git",
+        "./dest_template"
+      ],
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "RUST_BACKTRACE": "1"
+      }
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug unit tests in executable 'templatr'",
+      "cargo": {
+        "args": ["test", "--no-run", "--bin=templatr", "--package=templatr"],
+        "filter": {
+          "name": "templatr",
+          "kind": "bin"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    }
+  ]
 }
