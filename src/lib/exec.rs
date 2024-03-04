@@ -8,7 +8,7 @@ use std::{
 };
 
 use fs_extra::dir::CopyOptions;
-use git2::Repository;
+use git2::{build::RepoBuilder, FetchOptions, Repository};
 use regex::Regex;
 use thiserror::Error;
 use walkdir::WalkDir;
@@ -69,7 +69,7 @@ pub enum ExecError {
 
 pub type Result<T> = core::result::Result<T, Box<ExecError>>;
 
-pub fn get_or_clone_to_cache(git: &str) -> Result<TemplateManifest> {
+pub fn get_or_clone_to_cache(git: &str, branch: Option<&str>) -> Result<TemplateManifest> {
     let path_info = get_template_cache_path_from_git(git)?;
 
     let template = path_info.path;
@@ -77,7 +77,25 @@ pub fn get_or_clone_to_cache(git: &str) -> Result<TemplateManifest> {
     if !template.exists() {
         fs::create_dir_all(&template).map_err(ExecError::IoError)?;
 
-        Repository::clone_recurse(git, template).map_err(ExecError::GitError)?;
+        let mut repo_builder = RepoBuilder::new();
+
+        if let Some(branch) = branch {
+            repo_builder.branch(branch);
+        }
+
+        let mut fetch_options = FetchOptions::default();
+        fetch_options.depth(1);
+        repo_builder.fetch_options(fetch_options);
+
+        let repo = repo_builder
+            .clone(git, template.as_path())
+            .map_err(ExecError::GitError)?;
+
+        repo.submodules()
+            .map_err(ExecError::GitError)?
+            .iter_mut()
+            .try_for_each(|s| s.update(true, None))
+            .map_err(ExecError::GitError)?;
     } else {
         update_cache(&template)?;
     }

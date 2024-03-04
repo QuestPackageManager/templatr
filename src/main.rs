@@ -10,6 +10,9 @@ struct Args {
     #[clap(short, long)]
     git: String,
 
+    #[clap(short, long)]
+    branch: Option<String>,
+
     /// Destination where template will be copied to. FILES WILL BE OVERWRITTEN
     dest: String,
 }
@@ -21,5 +24,5 @@ fn main() -> color_eyre::Result<()> {
     let git = args.git;
     let dest = args.dest;
 
-    prompt(&git, &dest)
+    prompt(&git, &dest, args.branch.as_deref())
 }
