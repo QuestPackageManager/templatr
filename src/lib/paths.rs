@@ -6,7 +6,7 @@ use std::{
 use super::exec::ExecError;
 use super::exec::Result;
 
-pub struct PathInfo<'a> {
+pub struct TemplatePathInfo<'a> {
     pub name: &'a str,
     pub parent: Option<&'a str>,
 
@@ -24,14 +24,18 @@ pub fn get_cache_folder() -> Result<PathBuf> {
     Ok(root.unwrap().join("templatr-rust"))
 }
 
-pub fn get_template_cache_path(name: &str) -> Result<PathBuf> {
+pub fn get_template_cache_path(name: &Path) -> Result<PathBuf> {
     let cache = get_cache_folder()?;
 
     Ok(cache.join(name))
 }
 
 /// Returns (name, path)
-pub fn get_template_cache_path_from_git(git: &str) -> Result<PathInfo> {
+pub fn get_template_cache_path_from_git<'a>(
+    git: &'a str,
+    branch: Option<&str>,
+) -> Result<TemplatePathInfo<'a>> {
+    // hacky way to get {name}/{repo} from git url
     let name_path = Path::new(git)
         .file_name()
         .unwrap_or_else(|| OsStr::new(git)); // TODO: Handle error properly
@@ -40,22 +44,21 @@ pub fn get_template_cache_path_from_git(git: &str) -> Result<PathInfo> {
         .parent()
         .map(|o| o.file_name().unwrap_or_default().to_str().unwrap()); // TODO: Handle error properly
 
-    let path_itself = if let Some(parent_path) = parent_path {
-        Path::new(parent_path)
-            .join(name_path)
-            .to_str()
-            .unwrap()
-            .to_string()
-    } else {
-        name_path.to_str().unwrap().to_string()
+    let base_path = match parent_path {
+        // {name}/{repo}
+        Some(parent_path) => Path::new(parent_path).join(name_path),
+        // {repo}
+        None => name_path.into(),
     };
+
+    let final_path = base_path.join(branch.unwrap_or("(default)"));
 
     let name = name_path.to_str().unwrap();
 
-    Ok(PathInfo {
+    Ok(TemplatePathInfo {
         name,
         parent: parent_path,
         git,
-        path: get_template_cache_path(&path_itself)?,
+        path: get_template_cache_path(&final_path)?,
     })
 }

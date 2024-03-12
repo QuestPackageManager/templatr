@@ -70,9 +70,9 @@ pub enum ExecError {
 pub type Result<T> = core::result::Result<T, Box<ExecError>>;
 
 pub fn get_or_clone_to_cache(git: &str, branch: Option<&str>) -> Result<TemplateManifest> {
-    let path_info = get_template_cache_path_from_git(git)?;
+    let template_path_info = get_template_cache_path_from_git(git, branch)?;
 
-    let template = path_info.path;
+    let template = template_path_info.path;
 
     if !template.exists() {
         fs::create_dir_all(&template).map_err(ExecError::IoError)?;
@@ -100,11 +100,11 @@ pub fn get_or_clone_to_cache(git: &str, branch: Option<&str>) -> Result<Template
         update_cache(&template)?;
     }
 
-    get_manifest(git)
+    get_manifest(git, branch)
 }
 
-pub fn get_manifest(git: &str) -> Result<TemplateManifest> {
-    let path_info = get_template_cache_path_from_git(git)?;
+pub fn get_manifest(git: &str, branch: Option<&str>) -> Result<TemplateManifest> {
+    let path_info = get_template_cache_path_from_git(git, branch)?;
 
     let template = path_info.path;
 
@@ -154,12 +154,13 @@ fn update_cache(template: &Path) -> Result<()> {
 
 pub fn copy_template(
     git: &str,
+    branch: Option<&str>,
     target: &Path,
     placeholders: &HashMap<PlaceHolder, String>,
 ) -> Result<()> {
-    let path_info = get_template_cache_path_from_git(git)?;
+    let path_info = get_template_cache_path_from_git(git, branch)?;
     let template = path_info.path;
-    let manifest = get_manifest(git)?;
+    let manifest = get_manifest(git, branch)?;
     let src = template.join(manifest.src);
 
     // validate placeholders

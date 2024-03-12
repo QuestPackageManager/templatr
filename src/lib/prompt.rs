@@ -3,6 +3,8 @@ use std::{collections::HashMap, fs, io, path::Path};
 use color_eyre::{eyre::Context, owo_colors::OwoColorize};
 use regex::Regex;
 
+use crate::paths;
+
 use super::{data::PlaceHolder, exec};
 
 fn get_input() -> color_eyre::Result<String> {
@@ -15,29 +17,42 @@ fn get_input() -> color_eyre::Result<String> {
     Ok(ret.replace("\r\n", "").replace('\n', ""))
 }
 
-fn get_bool_input() -> color_eyre::Result<bool> {
+fn get_bool_user_input() -> color_eyre::Result<bool> {
     let v = get_input()?;
     Ok(v == "y" || v == "Y")
 }
 
 pub fn prompt(git: &str, dest: &str, branch: Option<&str>) -> color_eyre::Result<()> {
-    let manifest = match exec::get_or_clone_to_cache(git, branch) {
-        Ok(manifest) => Ok(manifest),
-        Err(e) => match e.as_ref() {
-            exec::ExecError::TemplateNotFound => {
-                println!(
-                    "{}",
-                    "Template not found in cache, do you want to continue? [Y/n]".yellow()
-                );
-                if !get_bool_input()? {
-                    // How to return main from here?
-                    std::process::exit(0);
-                }
+    println!(
+        "Checking cache {}",
+        paths::get_template_cache_path_from_git(git, branch)?
+            .path
+            .display()
+            .yellow()
+    );
 
-                exec::get_or_clone_to_cache(git, branch)
+    let manifest = match exec::get_manifest(git, branch) {
+        // manifest exists
+        Ok(manifest) => {
+            // update cache
+            exec::get_or_clone_to_cache(git, branch)?;
+            Ok(manifest)
+        }
+        // if template not found
+        Err(e) if matches!(*e, exec::ExecError::TemplateNotFound) => {
+            println!(
+                "{}",
+                "Template not found in cache, do you want to continue? [Y/n]".yellow()
+            );
+            if !get_bool_user_input()? {
+                // How to return main from here?
+                std::process::exit(0);
             }
-            _ => Err(e),
-        },
+
+            exec::get_or_clone_to_cache(git, branch)
+        }
+        // raise error
+        Err(e) => Err(e),
     }?;
 
     println!(
@@ -47,7 +62,7 @@ pub fn prompt(git: &str, dest: &str, branch: Option<&str>) -> color_eyre::Result
     );
     println!("Template will be copied over to {}", dest.purple());
     println!("Do you want to continue? [Y/n]");
-    if !get_bool_input()? {
+    if !get_bool_user_input()? {
         return Ok(());
     }
 
@@ -58,7 +73,11 @@ pub fn prompt(git: &str, dest: &str, branch: Option<&str>) -> color_eyre::Result
             placeholder.target.cyan(),
             placeholder.prompt.yellow(),
             placeholder.optional,
-            placeholder.regex.clone().unwrap_or_default().purple()
+            placeholder
+                .regex
+                .clone()
+                .unwrap_or("N/A".to_string())
+                .purple()
         );
 
         loop {
@@ -85,7 +104,7 @@ pub fn prompt(git: &str, dest: &str, branch: Option<&str>) -> color_eyre::Result
 
     fs::create_dir_all(dest)?;
 
-    exec::copy_template(git, Path::new(&dest), &placeholders)?;
+    exec::copy_template(git, branch, Path::new(&dest), &placeholders)?;
 
     Ok(())
 }
