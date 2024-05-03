@@ -137,7 +137,7 @@ pub fn get_manifest(git: &str, branch: Option<&str>) -> Result<TemplateManifest>
 
 // https://github.com/rust-lang/git2-rs/blob/88c67f788d59b4c180580b0ac6d119d42c59f61c/examples/pull.rs#L26
 fn update_cache(template: &Path) -> Result<()> {
-    println!("Checking for updates");
+    println!("Checking for updates through git pull");
 
     let mut process = Command::new("git");
     process.current_dir(template.parent().unwrap());
