@@ -3,12 +3,14 @@ use std::{
     collections::HashMap,
     fs::{self, File},
     io::{self, Read, Seek, SeekFrom, Write},
+    num::NonZero,
     path::Path,
     process::Command,
+    sync::atomic::AtomicBool,
 };
 
 use fs_extra::dir::CopyOptions;
-use git2::{build::RepoBuilder, FetchOptions, Repository};
+use gix::progress::Discard;
 use regex::Regex;
 use thiserror::Error;
 use walkdir::WalkDir;
@@ -25,7 +27,13 @@ pub enum ExecError {
     NoCacheFound,
 
     #[error("Unable to clone repository")]
-    GitError(#[from] git2::Error),
+    GixCloneError(#[from] gix::clone::Error),
+    #[error("Unable to fetch repository")]
+    GixFetchError(#[from] gix::clone::fetch::Error),
+    #[error("Unable to checkout repository")]
+    GixCheckoutError(#[from] gix::clone::checkout::main_worktree::Error),
+    #[error("Unable to checkout repository")]
+    GixSubmoduleError(#[from] gix::submodule::modules::Error),
 
     #[error("Unable to copy directory")]
     IoError(#[from] io::Error),
@@ -77,25 +85,56 @@ pub fn get_or_clone_to_cache(git: &str, branch: Option<&str>) -> Result<Template
     if !template.exists() {
         fs::create_dir_all(&template).map_err(ExecError::IoError)?;
 
-        let mut repo_builder = RepoBuilder::new();
+        let mut fetch_options =
+            gix::prepare_clone(git, template.as_path()).map_err(ExecError::GixCloneError)?;
+        fetch_options = fetch_options.with_ref_name(branch).expect("Branch name is not valid");
+        fetch_options = fetch_options.with_shallow(gix::remote::fetch::Shallow::DepthAtRemote(
+            NonZero::new(1).unwrap(),
+        ));
+        let (mut checkout, _outcome) = fetch_options
+            .fetch_then_checkout(Discard {}, &AtomicBool::new(false))
+            .map_err(ExecError::GixFetchError)?;
 
-        if let Some(branch) = branch {
-            repo_builder.branch(branch);
+        let (repo, _outcome) = checkout
+            .main_worktree(Discard {}, &AtomicBool::new(false))
+            .map_err(ExecError::GixCheckoutError)?;
+
+        let modules = repo.submodules().map_err(ExecError::GixSubmoduleError)?;
+        if let Some(modules) = modules {
+            modules
+                .for_each(|submodule| {
+                    println!(
+                        "Warning! Submodules are not supported yet! Skipping {}",
+                        submodule.path().unwrap()
+                    );
+                    // let submodule_path = repo.workdir_path(submodule.path().unwrap()).unwrap();
+
+                    // let sub_repo = submodule.open()?.unwrap();
+
+                    // let mut fetch = gix::prepare_clone(submodule.url().unwrap(), &submodule_path)?;
+                    // fetch.with_ref_name()
+                    // fetch.tags(gix::remote::fetch::Tags::All);
+                    // let outcome = fetch
+                    //     .fetch(&mut Discard {}, &AtomicBool::new(false))
+                    //     .map_err(|e| gix::submodule::modules::Error::Update(e.into()))?;
+
+                    // // Update submodule to latest commit on its branch
+                    // let main_branch = sub_repo
+                    //     .find_reference("HEAD")
+                    //     .and_then(|head| head.resolve())
+                    //     .map_err(|e| gix::submodule::modules::Error::Update(e.into()))?;
+
+                    // if let Some(target_id) = main_branch.target().id() {
+                    //     let checkout = gix::checkout::tree::Options::default();
+                    //     sub_repo
+                    //         .checkout_tree()
+                    //         .options(checkout)
+                    //         .commit(target_id)
+                    //         .map_err(|e| gix::submodule::modules::Error::Update(e.into()))?;
+                    // }
+                    // Ok(())
+                });
         }
-
-        let mut fetch_options = FetchOptions::default();
-        fetch_options.depth(1);
-        repo_builder.fetch_options(fetch_options);
-
-        let repo = repo_builder
-            .clone(git, template.as_path())
-            .map_err(ExecError::GitError)?;
-
-        repo.submodules()
-            .map_err(ExecError::GitError)?
-            .iter_mut()
-            .try_for_each(|s| s.update(true, None))
-            .map_err(ExecError::GitError)?;
     } else {
         update_cache(&template)?;
     }
@@ -196,7 +235,7 @@ pub fn copy_template(
         .collect();
 
     if !invalid_values.is_empty() {
-        let (mismatch_p, mismatch_v) = *invalid_values.get(0).unwrap();
+        let (mismatch_p, mismatch_v) = *invalid_values.first().unwrap();
         return Err(Box::new(ExecError::PlaceholderDoesNotMatchRegex(
             mismatch_v.clone(),
             mismatch_p.regex.as_ref().unwrap().clone(),
