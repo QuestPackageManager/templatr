@@ -15,22 +15,22 @@ jobs:
             file-name: templatr
             prefix: linux
 
-          - os: macOS-latest
-            file-name: templatr
-            prefix: macos
+          # - os: macOS-latest
+          #   file-name: templatr
+          #   prefix: macos
 
-          - os: windows-latest
-            file-name: templatr.exe
-            prefix: windows
+          # - os: windows-latest
+          #   file-name: templatr.exe
+          #   prefix: windows
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
 
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
 
-      - uses: actions/cache@v2
+      - uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/bin/
@@ -52,7 +52,7 @@ jobs:
           args: --release
 
       - name: Upload executable
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.prefix }}-${{ matrix.file-name }}
           path: ./target/release/${{ matrix.file-name }}
