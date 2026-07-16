@@ -20,6 +20,7 @@ gix = { version = "*", features = [
     # "command",
     # "attributes",
     # "progress-tree",
+    "sha1",
     "worktree-mutation",
     "blocking-network-client",
     "blocking-http-transport-reqwest-rust-tls",
