@@ -3,13 +3,17 @@ use std::{
     collections::HashMap,
     fs::{self, File},
     io::{self, Read, Seek, SeekFrom, Write},
-    num::NonZero,
     path::Path,
-    process::Command,
-    sync::atomic::AtomicBool,
 };
 
+#[cfg(feature = "gix")]
+use std::{num::NonZero, sync::atomic::AtomicBool};
+
+#[cfg(feature = "git_cli")]
+use std::process::Command;
+
 use fs_extra::dir::CopyOptions;
+#[cfg(feature = "gix")]
 use gix::progress::Discard;
 use regex::Regex;
 use thiserror::Error;
@@ -26,14 +30,22 @@ pub enum ExecError {
     #[error("None of the expected cache folders for the system were found")]
     NoCacheFound,
 
+    #[cfg(feature = "gix")]
     #[error("Unable to clone repository")]
     GixCloneError(#[from] gix::clone::Error),
+    #[cfg(feature = "gix")]
     #[error("Unable to fetch repository")]
     GixFetchError(#[from] gix::clone::fetch::Error),
+    #[cfg(feature = "gix")]
     #[error("Unable to checkout repository")]
     GixCheckoutError(#[from] gix::clone::checkout::main_worktree::Error),
+    #[cfg(feature = "gix")]
     #[error("Unable to checkout repository")]
     GixSubmoduleError(#[from] gix::submodule::modules::Error),
+
+    #[cfg(feature = "git_cli")]
+    #[error("git command failed: {0}")]
+    GitCliError(String),
 
     #[error("Unable to copy directory")]
     IoError(#[from] io::Error),
@@ -84,62 +96,86 @@ pub fn get_or_clone_to_cache(git: &str, branch: Option<&str>) -> Result<Template
 
     if !template.exists() {
         fs::create_dir_all(&template).map_err(ExecError::IoError)?;
-
-        let mut fetch_options =
-            gix::prepare_clone(git, template.as_path()).map_err(ExecError::GixCloneError)?;
-        fetch_options = fetch_options.with_ref_name(branch).expect("Branch name is not valid");
-        fetch_options = fetch_options.with_shallow(gix::remote::fetch::Shallow::DepthAtRemote(
-            NonZero::new(1).unwrap(),
-        ));
-        let (mut checkout, _outcome) = fetch_options
-            .fetch_then_checkout(Discard {}, &AtomicBool::new(false))
-            .map_err(ExecError::GixFetchError)?;
-
-        let (repo, _outcome) = checkout
-            .main_worktree(Discard {}, &AtomicBool::new(false))
-            .map_err(ExecError::GixCheckoutError)?;
-
-        let modules = repo.submodules().map_err(ExecError::GixSubmoduleError)?;
-        if let Some(modules) = modules {
-            modules
-                .for_each(|submodule| {
-                    println!(
-                        "Warning! Submodules are not supported yet! Skipping {}",
-                        submodule.path().unwrap()
-                    );
-                    // let submodule_path = repo.workdir_path(submodule.path().unwrap()).unwrap();
-
-                    // let sub_repo = submodule.open()?.unwrap();
-
-                    // let mut fetch = gix::prepare_clone(submodule.url().unwrap(), &submodule_path)?;
-                    // fetch.with_ref_name()
-                    // fetch.tags(gix::remote::fetch::Tags::All);
-                    // let outcome = fetch
-                    //     .fetch(&mut Discard {}, &AtomicBool::new(false))
-                    //     .map_err(|e| gix::submodule::modules::Error::Update(e.into()))?;
-
-                    // // Update submodule to latest commit on its branch
-                    // let main_branch = sub_repo
-                    //     .find_reference("HEAD")
-                    //     .and_then(|head| head.resolve())
-                    //     .map_err(|e| gix::submodule::modules::Error::Update(e.into()))?;
-
-                    // if let Some(target_id) = main_branch.target().id() {
-                    //     let checkout = gix::checkout::tree::Options::default();
-                    //     sub_repo
-                    //         .checkout_tree()
-                    //         .options(checkout)
-                    //         .commit(target_id)
-                    //         .map_err(|e| gix::submodule::modules::Error::Update(e.into()))?;
-                    // }
-                    // Ok(())
-                });
-        }
+        clone_repo(git, branch, &template)?;
     } else {
-        update_cache(&template)?;
+        update_repo(git, branch, &template)?;
     }
 
     get_manifest(git, branch)
+}
+
+#[cfg(feature = "gix")]
+fn clone_repo(git: &str, branch: Option<&str>, template: &Path) -> Result<()> {
+    let mut fetch_options =
+        gix::prepare_clone(git, template).map_err(ExecError::GixCloneError)?;
+    fetch_options = fetch_options.with_ref_name(branch).expect("Branch name is not valid");
+    fetch_options = fetch_options.with_shallow(gix::remote::fetch::Shallow::DepthAtRemote(
+        NonZero::new(1).unwrap(),
+    ));
+    let (mut checkout, _outcome) = fetch_options
+        .fetch_then_checkout(Discard {}, &AtomicBool::new(false))
+        .map_err(ExecError::GixFetchError)?;
+
+    let (repo, _outcome) = checkout
+        .main_worktree(Discard {}, &AtomicBool::new(false))
+        .map_err(ExecError::GixCheckoutError)?;
+
+    let modules = repo.submodules().map_err(ExecError::GixSubmoduleError)?;
+    if let Some(modules) = modules {
+        modules.for_each(|submodule| {
+            println!(
+                "Warning! Submodules are not supported yet! Skipping {}",
+                submodule.path().unwrap()
+            );
+            // let submodule_path = repo.workdir_path(submodule.path().unwrap()).unwrap();
+
+            // let sub_repo = submodule.open()?.unwrap();
+
+            // let mut fetch = gix::prepare_clone(submodule.url().unwrap(), &submodule_path)?;
+            // fetch.with_ref_name()
+            // fetch.tags(gix::remote::fetch::Tags::All);
+            // let outcome = fetch
+            //     .fetch(&mut Discard {}, &AtomicBool::new(false))
+            //     .map_err(|e| gix::submodule::modules::Error::Update(e.into()))?;
+
+            // // Update submodule to latest commit on its branch
+            // let main_branch = sub_repo
+            //     .find_reference("HEAD")
+            //     .and_then(|head| head.resolve())
+            //     .map_err(|e| gix::submodule::modules::Error::Update(e.into()))?;
+
+            // if let Some(target_id) = main_branch.target().id() {
+            //     let checkout = gix::checkout::tree::Options::default();
+            //     sub_repo
+            //         .checkout_tree()
+            //         .options(checkout)
+            //         .commit(target_id)
+            //         .map_err(|e| gix::submodule::modules::Error::Update(e.into()))?;
+            // }
+            // Ok(())
+        });
+    }
+
+    Ok(())
+}
+
+#[cfg(feature = "git_cli")]
+fn clone_repo(git: &str, branch: Option<&str>, template: &Path) -> Result<()> {
+    let mut process = Command::new("git");
+    process.arg("clone").arg("--depth").arg("1");
+    if let Some(branch) = branch {
+        process.arg("--branch").arg(branch);
+    }
+    process.arg(git).arg(template);
+
+    let output = process.output().map_err(ExecError::IoError)?;
+    if !output.status.success() {
+        return Err(Box::new(ExecError::GitCliError(
+            String::from_utf8_lossy(&output.stderr).into_owned(),
+        )));
+    }
+
+    Ok(())
 }
 
 pub fn get_manifest(git: &str, branch: Option<&str>) -> Result<TemplateManifest> {
@@ -174,18 +210,32 @@ pub fn get_manifest(git: &str, branch: Option<&str>) -> Result<TemplateManifest>
     Ok(manifest)
 }
 
-// https://github.com/rust-lang/git2-rs/blob/88c67f788d59b4c180580b0ac6d119d42c59f61c/examples/pull.rs#L26
-fn update_cache(template: &Path) -> Result<()> {
+// gix has no simple incremental "pull" story that composes well with the shallow
+// clones used here, so an update is just a fresh shallow re-clone.
+#[cfg(feature = "gix")]
+fn update_repo(git: &str, branch: Option<&str>, template: &Path) -> Result<()> {
+    println!("Checking for updates by re-cloning");
+
+    fs::remove_dir_all(template).map_err(ExecError::IoError)?;
+    fs::create_dir_all(template).map_err(ExecError::IoError)?;
+    clone_repo(git, branch, template)
+}
+
+#[cfg(feature = "git_cli")]
+fn update_repo(_git: &str, _branch: Option<&str>, template: &Path) -> Result<()> {
     println!("Checking for updates through git pull");
 
-    let mut process = Command::new("git");
-    process.current_dir(template.parent().unwrap());
-    process.arg("pull");
+    let output = Command::new("git")
+        .current_dir(template)
+        .arg("pull")
+        .output()
+        .map_err(ExecError::IoError)?;
 
-    let res = process.output();
-
-    if let Err(e) = res {
-        println!("Error: {e}");
+    if !output.status.success() {
+        println!(
+            "Warning: git pull failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
 
     Ok(())

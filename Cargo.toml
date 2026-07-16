@@ -23,7 +23,7 @@ gix = { version = "*", features = [
     "worktree-mutation",
     "blocking-network-client",
     "blocking-http-transport-reqwest-rust-tls",
-], default-features = false }
+], default-features = false, optional = true }
 
 dirs = "6"
 regex = "1"
@@ -41,6 +41,12 @@ opt-level = 3
 lto = true
 
 [features]
-default = ["cli", "serde"]
+default = ["cli", "serde", "gix"]
 serde = ["dep:serde", "dep:serde_json"]
 cli = ["dep:clap"]
+
+# Git backend used to clone/update cached templates. Pick exactly one:
+# - "gix": pure-Rust implementation via the gix (gitoxide) crate, no external dependency.
+# - "git_cli": shells out to the `git` binary found in PATH.
+gix = ["dep:gix"]
+git_cli = []
