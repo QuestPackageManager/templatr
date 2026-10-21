@@ -31,17 +31,8 @@ pub enum ExecError {
     NoCacheFound,
 
     #[cfg(feature = "gix")]
-    #[error("Unable to clone repository")]
-    GixCloneError(#[from] gix::clone::Error),
-    #[cfg(feature = "gix")]
-    #[error("Unable to fetch repository")]
-    GixFetchError(#[from] gix::clone::fetch::Error),
-    #[cfg(feature = "gix")]
-    #[error("Unable to checkout repository")]
-    GixCheckoutError(#[from] gix::clone::checkout::main_worktree::Error),
-    #[cfg(feature = "gix")]
-    #[error("Unable to checkout repository")]
-    GixSubmoduleError(#[from] gix::submodule::modules::Error),
+    #[error("Git operation failed")]
+    GixError(#[from] gix::Error),
 
     #[cfg(feature = "git_cli")]
     #[error("git command failed: {0}")]
@@ -107,20 +98,20 @@ pub fn get_or_clone_to_cache(git: &str, branch: Option<&str>) -> Result<Template
 #[cfg(feature = "gix")]
 fn clone_repo(git: &str, branch: Option<&str>, template: &Path) -> Result<()> {
     let mut fetch_options =
-        gix::prepare_clone(git, template).map_err(ExecError::GixCloneError)?;
+        gix::prepare_clone(git, template).map_err(ExecError::GixError)?;
     fetch_options = fetch_options.with_ref_name(branch).expect("Branch name is not valid");
     fetch_options = fetch_options.with_shallow(gix::remote::fetch::Shallow::DepthAtRemote(
         NonZero::new(1).unwrap(),
     ));
     let (mut checkout, _outcome) = fetch_options
         .fetch_then_checkout(Discard {}, &AtomicBool::new(false))
-        .map_err(ExecError::GixFetchError)?;
+        .map_err(ExecError::GixError)?;
 
     let (repo, _outcome) = checkout
         .main_worktree(Discard {}, &AtomicBool::new(false))
-        .map_err(ExecError::GixCheckoutError)?;
+        .map_err(ExecError::GixError)?;
 
-    let modules = repo.submodules().map_err(ExecError::GixSubmoduleError)?;
+    let modules = repo.submodules().map_err(ExecError::GixError)?;
     if let Some(modules) = modules {
         modules.for_each(|submodule| {
             println!(

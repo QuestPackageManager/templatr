@@ -26,7 +26,7 @@ gix = { version = "*", features = [
     "blocking-http-transport-reqwest-rust-tls",
 ], default-features = false, optional = true }
 
-dirs = "6"
+dirs = "7"
 regex = "1"
 fs_extra = "1"
 walkdir = "2"
